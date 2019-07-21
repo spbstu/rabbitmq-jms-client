@@ -39,36 +39,60 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
 
     private final Logger logger = LoggerFactory.getLogger(RMQConnection.class);
 
-    /** the TCP connection wrapper to the RabbitMQ broker */
+    /**
+     * the TCP connection wrapper to the RabbitMQ broker
+     */
     private final com.rabbitmq.client.Connection rabbitConnection;
-    /** Hard coded connection meta data returned in the call {@link #getMetaData()} call */
+    /**
+     * Hard coded connection meta data returned in the call {@link #getMetaData()} call
+     */
     private static final ConnectionMetaData connectionMetaData = new RMQConnectionMetaData();
-    /** The client ID for this connection */
+    /**
+     * The client ID for this connection
+     */
     private String clientID;
-    /** The exception listener */
+    /**
+     * The exception listener
+     */
     private final AtomicReference<ExceptionListener> exceptionListener = new AtomicReference<ExceptionListener>();
-    /** The list of all {@link RMQSession} objects created by this connection */
-    private final List<RMQSession> sessions = Collections.<RMQSession> synchronizedList(new ArrayList<RMQSession>());
-    /** value to see if this connection has been closed */
+    /**
+     * The list of all {@link RMQSession} objects created by this connection
+     */
+    private final List<RMQSession> sessions = Collections.<RMQSession>synchronizedList(new ArrayList<RMQSession>());
+    /**
+     * value to see if this connection has been closed
+     */
     private volatile boolean closed = false;
-    /** atomic flag to pause and unpause the connection consumers (see {@link #start()} and {@link #stop()} methods) */
+    /**
+     * atomic flag to pause and unpause the connection consumers (see {@link #start()} and {@link #stop()} methods)
+     */
     private final AtomicBoolean stopped = new AtomicBoolean(true);
 
-    /** maximum time (in ms) to wait for close() to complete */
+    /**
+     * maximum time (in ms) to wait for close() to complete
+     */
     private final long terminationTimeout;
 
-    /** max number of messages to read from a browsed queue */
+    /**
+     * max number of messages to read from a browsed queue
+     */
     private final int queueBrowserReadMax;
 
-    /** How long to wait for onMessage to return, in milliseconds */
+    /**
+     * How long to wait for onMessage to return, in milliseconds
+     */
     private final int onMessageTimeoutMs;
 
     private static ConcurrentHashMap<String, String> CLIENT_IDS = new ConcurrentHashMap<String, String>();
 
-    /** List of all our durable subscriptions so we can track them on a per connection basis (maintained by sessions).*/
+    /**
+     * List of all our durable subscriptions so we can track them on a per connection basis (maintained by sessions).
+     */
     private final Map<String, RMQMessageConsumer> subscriptions = new ConcurrentHashMap<String, RMQMessageConsumer>();
 
-    /** This is used for JMSCTS test cases, as ClientID should only be configurable right after the connection has been created */
+    /**
+     * This is used for JMSCTS test cases, as ClientID should only be configurable right after the connection has been created
+     */
     private volatile boolean canSetClientID = true;
 
     /**
@@ -93,11 +117,14 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
      */
     private boolean requeueOnMessageListenerException;
 
+    private boolean requeueOnNackException;
+
     /**
      * Whether using auto-delete for server-named queues for non-durable topics.
      * If set to true, those queues will be deleted when the session is closed.
      * If set to false, queues will be deleted when the owning connection is closed.
      * Default is false.
+     *
      * @since 1.8.0
      */
     private final boolean cleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose;
@@ -127,6 +154,7 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
 
     /**
      * Creates an RMQConnection object.
+     *
      * @param connectionParams parameters for this connection
      */
     public RMQConnection(ConnectionParams connectionParams) {
@@ -140,6 +168,7 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
         this.channelsQos = connectionParams.getChannelsQos();
         this.preferProducerMessageProperty = connectionParams.willPreferProducerMessageProperty();
         this.requeueOnMessageListenerException = connectionParams.willRequeueOnMessageListenerException();
+        this.requeueOnNackException = connectionParams.willRequeueOnNackException();
         this.cleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose = connectionParams.isCleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose();
         this.amqpPropertiesCustomiser = connectionParams.getAmqpPropertiesCustomiser();
         this.sendingContextConsumer = connectionParams.getSendingContextConsumer();
@@ -148,32 +177,39 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
 
     /**
      * Creates an RMQConnection object.
-     * @param rabbitConnection the TCP connection wrapper to the RabbitMQ broker
-     * @param terminationTimeout timeout for close in milliseconds
+     *
+     * @param rabbitConnection    the TCP connection wrapper to the RabbitMQ broker
+     * @param terminationTimeout  timeout for close in milliseconds
      * @param queueBrowserReadMax maximum number of messages to read from a QueueBrowser (before filtering)
-     * @param onMessageTimeoutMs how long to wait for onMessage to return, in milliseconds
+     * @param onMessageTimeoutMs  how long to wait for onMessage to return, in milliseconds
      */
     public RMQConnection(com.rabbitmq.client.Connection rabbitConnection, long terminationTimeout, int queueBrowserReadMax, int onMessageTimeoutMs) {
         this(new ConnectionParams()
-            .setRabbitConnection(rabbitConnection)
-            .setTerminationTimeout(terminationTimeout)
-            .setQueueBrowserReadMax(queueBrowserReadMax)
-            .setOnMessageTimeoutMs(onMessageTimeoutMs)
+                .setRabbitConnection(rabbitConnection)
+                .setTerminationTimeout(terminationTimeout)
+                .setQueueBrowserReadMax(queueBrowserReadMax)
+                .setOnMessageTimeoutMs(onMessageTimeoutMs)
         );
     }
 
     private static final long FIFTEEN_SECONDS_MS = 15000;
     private static final int TWO_SECONDS_MS = 2000;
+
     /**
      * Creates an RMQConnection object, with default termination timeout of 15 seconds, a 2 seconds timeout for onMessage, and unlimited reads from QueueBrowsers.
+     *
      * @param rabbitConnection the TCP connection wrapper to the RabbitMQ broker
      */
     public RMQConnection(com.rabbitmq.client.Connection rabbitConnection) {
         this(rabbitConnection, FIFTEEN_SECONDS_MS, 0, TWO_SECONDS_MS);
     }
 
-    /** For RMQSession to retrieve */
-    int getQueueBrowserReadMax() { return this.queueBrowserReadMax; }
+    /**
+     * For RMQSession to retrieve
+     */
+    int getQueueBrowserReadMax() {
+        return this.queueBrowserReadMax;
+    }
 
     /**
      * {@inheritDoc}
@@ -184,17 +220,18 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
         illegalStateExceptionIfClosed();
         freezeClientID();
         RMQSession session = new RMQSession(new SessionParams()
-            .setConnection(this)
-            .setTransacted(transacted)
-            .setOnMessageTimeoutMs(onMessageTimeoutMs)
-            .setMode(acknowledgeMode)
-            .setSubscriptions(this.subscriptions)
-            .setPreferProducerMessageProperty(this.preferProducerMessageProperty)
-            .setRequeueOnMessageListenerException(this.requeueOnMessageListenerException)
-            .setCleanUpServerNamedQueuesForNonDurableTopics(this.cleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose)
-            .setAmqpPropertiesCustomiser(this.amqpPropertiesCustomiser)
-            .setSendingContextConsumer(this.sendingContextConsumer)
-            .setReceivingContextConsumer(this.receivingContextConsumer)
+                .setConnection(this)
+                .setTransacted(transacted)
+                .setOnMessageTimeoutMs(onMessageTimeoutMs)
+                .setMode(acknowledgeMode)
+                .setSubscriptions(this.subscriptions)
+                .setPreferProducerMessageProperty(this.preferProducerMessageProperty)
+                .setRequeueOnMessageListenerException(this.requeueOnMessageListenerException)
+                .setRequeueOnNackException(this.requeueOnNackException)
+                .setCleanUpServerNamedQueuesForNonDurableTopics(this.cleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose)
+                .setAmqpPropertiesCustomiser(this.amqpPropertiesCustomiser)
+                .setSendingContextConsumer(this.sendingContextConsumer)
+                .setReceivingContextConsumer(this.receivingContextConsumer)
         );
         session.setTrustedPackages(this.trustedPackages);
         this.sessions.add(session);
@@ -225,9 +262,10 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
     public void setClientID(String clientID) throws JMSException {
         logger.trace("set ClientID to '{}'", clientID);
         illegalStateExceptionIfClosed();
-        if (!canSetClientID) throw new IllegalStateException("Client ID can only be set right after connection creation");
-        if (this.clientID==null) {
-            if (CLIENT_IDS.putIfAbsent(clientID, clientID)==null) {
+        if (!canSetClientID)
+            throw new IllegalStateException("Client ID can only be set right after connection creation");
+        if (this.clientID == null) {
+            if (CLIENT_IDS.putIfAbsent(clientID, clientID) == null) {
                 this.clientID = clientID;
             } else {
                 throw new InvalidClientIDException(String.format("A connection with client ID [%s] already exists.", clientID));
@@ -244,7 +282,6 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
 
     /**
      * @param value list of trusted package prefixes
-     *
      * @see com.rabbitmq.jms.admin.RMQConnectionFactory#setTrustedPackages(List)
      */
     public void setTrustedPackages(List<String> value) {
@@ -376,7 +413,7 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
 
     Channel createRabbitChannel(boolean transactional) throws IOException {
         Channel channel = this.rabbitConnection.createChannel();
-        if(this.channelsQos != NO_CHANNEL_QOS) {
+        if (this.channelsQos != NO_CHANNEL_QOS) {
             channel.basicQos(channelsQos);
         }
         if (transactional) {
@@ -398,7 +435,7 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
      */
     @Override
     public ConnectionConsumer
-            createConnectionConsumer(Topic topic, String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
+    createConnectionConsumer(Topic topic, String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
         throw new UnsupportedOperationException();
     }
 
@@ -446,7 +483,8 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
 
     /* Internal methods. */
 
-    /** A connection must track all sessions that are created,
+    /**
+     * A connection must track all sessions that are created,
      * but when we call {@link RMQSession#close()} we must unregister this
      * session with the connection.
      * This method is called by {@link RMQSession#close()} and should not be called from anywhere else.
@@ -473,10 +511,18 @@ public class RMQConnection implements Connection, QueueConnection, TopicConnecti
                 .append('}').toString();
     }
 
+    public boolean willRequeueOnNackException() {
+        return requeueOnNackException;
+    }
+
+    public void setRequeueOnNackException(boolean requeueOnNackException) {
+        this.requeueOnNackException = requeueOnNackException;
+    }
+
     private class RMQConnectionShutdownListener implements ShutdownListener {
         @Override
         public void shutdownCompleted(ShutdownSignalException cause) {
-            if ( null==exceptionListener.get() || cause.isInitiatedByApplication() )
+            if (null == exceptionListener.get() || cause.isInitiatedByApplication())
                 return; // Ignore this
             exceptionListener.get().onException(new RMQJMSException(String.format("error in %s, connection closed, with reason %s", cause.getReference(), cause.getReason()), cause));
         }

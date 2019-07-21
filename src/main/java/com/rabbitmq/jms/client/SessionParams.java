@@ -43,6 +43,8 @@ public class SessionParams {
      */
     private boolean requeueOnMessageListenerException = false;
 
+    private boolean requeueOnNackException = false;
+
     /**
      * Whether using auto-delete for server-named queues for non-durable topics.
      * If set to true, those queues will be deleted when the session is closed.
@@ -171,5 +173,14 @@ public class SessionParams {
 
     public ReceivingContextConsumer getReceivingContextConsumer() {
         return receivingContextConsumer;
+    }
+
+    public boolean willRequeueOnNackException() {
+        return requeueOnNackException;
+    }
+
+    public SessionParams setRequeueOnNackException(boolean requeueOnNackException) {
+        this.requeueOnNackException = requeueOnNackException;
+        return this;
     }
 }

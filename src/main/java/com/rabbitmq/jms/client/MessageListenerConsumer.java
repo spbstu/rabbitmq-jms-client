@@ -9,6 +9,7 @@ import javax.jms.JMSException;
 import javax.jms.MessageListener;
 
 import com.rabbitmq.jms.util.RMQJMSException;
+import com.rabbitmq.jms.util.RMQNackException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +30,9 @@ class MessageListenerConsumer implements Consumer, Abortable {
     private final Logger logger = LoggerFactory.getLogger(MessageListenerConsumer.class);
 
     private final Object tagLock = new Object();
-    /** The consumer tag for this RabbitMQ consumer */
+    /**
+     * The consumer tag for this RabbitMQ consumer
+     */
     private String consTag = null; // @GuardedBy(tagLock);
 
     private final RMQMessageConsumer messageConsumer;
@@ -52,13 +55,14 @@ class MessageListenerConsumer implements Consumer, Abortable {
 
     /**
      * Constructor
-     * @param messageConsumer to which this Rabbit Consumer belongs
-     * @param channel Rabbit channel this Consumer uses
-     * @param messageListener to call {@link MessageListener#onMessage(javax.jms.Message) onMessage(Message)} with received messages
+     *
+     * @param messageConsumer    to which this Rabbit Consumer belongs
+     * @param channel            Rabbit channel this Consumer uses
+     * @param messageListener    to call {@link MessageListener#onMessage(javax.jms.Message) onMessage(Message)} with received messages
      * @param terminationTimeout wait time (in nanoseconds) for cancel to take effect
      */
     public MessageListenerConsumer(RMQMessageConsumer messageConsumer, Channel channel, MessageListener messageListener, long terminationTimeout,
-                boolean requeueOnMessageListenerException, ReceivingContextConsumer receivingContextConsumer) {
+                                   boolean requeueOnMessageListenerException, ReceivingContextConsumer receivingContextConsumer) {
         this.messageConsumer = messageConsumer;
         this.channel = channel;
         this.messageListener = messageListener;
@@ -72,7 +76,7 @@ class MessageListenerConsumer implements Consumer, Abortable {
     }
 
     private String getConsTag() {
-        synchronized(tagLock) {
+        synchronized (tagLock) {
             if (this.consTag == null)
                 this.consTag = RMQMessageConsumer.newConsumerTag();  // new consumer tag
             return this.consTag;
@@ -80,7 +84,7 @@ class MessageListenerConsumer implements Consumer, Abortable {
     }
 
     private void clearConsTag() {
-        synchronized(tagLock) {
+        synchronized (tagLock) {
             this.consTag = null;
         }
     }
@@ -125,34 +129,55 @@ class MessageListenerConsumer implements Consumer, Abortable {
         try {
             long dtag = envelope.getDeliveryTag();
             if (this.messageListener != null) {
-                if (this.requeueOnMessageListenerException) {
-                    // requeuing in case of RuntimeException from the listener
-                    // see https://github.com/rabbitmq/rabbitmq-jms-client/issues/23
-                    // see section 4.5.2 of JMS 1.1 specification
-                    RMQMessage msg = RMQMessage.convertMessage(this.messageConsumer.getSession(), this.messageConsumer.getDestination(),
+                RMQMessage msg = RMQMessage.convertMessage(this.messageConsumer.getSession(), this.messageConsumer.getDestination(),
                         response, this.receivingContextConsumer);
-                    boolean runtimeExceptionInListener = false;
-                    try {
-                        this.messageConsumer.getSession().deliverMessage(msg, this.messageListener);
-                    } catch(RMQMessageListenerExecutionJMSException e) {
-                        if (e.getCause() instanceof RuntimeException) {
-                            runtimeExceptionInListener = true;
+                boolean runtimeExceptionInListener = false;
+                try {
+                    this.messageConsumer.getSession().deliverMessage(msg, this.messageListener);
+                } catch (RMQMessageListenerExecutionJMSException e) {
+                    if (e.getCause() instanceof RuntimeException) {
+                        runtimeExceptionInListener = true;
+                        if (e.getCause().getCause() instanceof RMQNackException) {
+                            nackOnNackException(dtag);
+                        } else if (requeueOnMessageListenerException) {
                             nack(dtag);
                             this.abort();
-                        } else {
-                            throw e;
                         }
+                    } else {
+                        throw e;
                     }
-                    if (!runtimeExceptionInListener) {
-                        dealWithAcknowledgments(dtag);
-                    }
-                } else {
-                    // this is the "historical" behavior, not compliant with the spec
-                    dealWithAcknowledgments(dtag);
-                    RMQMessage msg = RMQMessage.convertMessage(this.messageConsumer.getSession(), this.messageConsumer.getDestination(),
-                        response, this.receivingContextConsumer);
-                    this.messageConsumer.getSession().deliverMessage(msg, this.messageListener);
                 }
+                if (!runtimeExceptionInListener) {
+                    dealWithAcknowledgments(dtag);
+                }
+//                if (this.requeueOnMessageListenerException) {
+//                    // requeuing in case of RuntimeException from the listener
+//                    // see https://github.com/rabbitmq/rabbitmq-jms-client/issues/23
+//                    // see section 4.5.2 of JMS 1.1 specification
+//                    RMQMessage msg = RMQMessage.convertMessage(this.messageConsumer.getSession(), this.messageConsumer.getDestination(),
+//                        response, this.receivingContextConsumer);
+//                    boolean runtimeExceptionInListener = false;
+//                    try {
+//                        this.messageConsumer.getSession().deliverMessage(msg, this.messageListener);
+//                    } catch(RMQMessageListenerExecutionJMSException e) {
+//                        if (e.getCause() instanceof RuntimeException) {
+//                            runtimeExceptionInListener = true;
+//                            nack(dtag);
+//                            this.abort();
+//                        } else {
+//                            throw e;
+//                        }
+//                    }
+//                    if (!runtimeExceptionInListener) {
+//                        dealWithAcknowledgments(dtag);
+//                    }
+//                } else {
+//                    // this is the "historical" behavior, not compliant with the spec
+//                    dealWithAcknowledgments(dtag);
+//                    RMQMessage msg = RMQMessage.convertMessage(this.messageConsumer.getSession(), this.messageConsumer.getDestination(),
+//                        response, this.receivingContextConsumer);
+//                    this.messageConsumer.getSession().deliverMessage(msg, this.messageListener);
+//                }
             } else {
                 // We are unable to deliver the message, nack it
                 logger.debug("basicNack: dtag='{}' (null MessageListener)", dtag);
@@ -170,6 +195,12 @@ class MessageListenerConsumer implements Consumer, Abortable {
     private void nack(long dtag) {
         if (!skipAck) {
             this.messageConsumer.getSession().explicitNack(dtag);
+        }
+    }
+
+    private void nackOnNackException(long dtag) {
+        if (!skipAck) {
+            this.messageConsumer.getSession().explicitNackOnNackException(dtag);
         }
     }
 
@@ -235,7 +266,7 @@ class MessageListenerConsumer implements Consumer, Abortable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (IOException e) {
-            if (! e.getMessage().equals("Unknown consumerTag")) {
+            if (!e.getMessage().equals("Unknown consumerTag")) {
                 logger.error("basicCancel (consumerTag='{}') threw unexpected exception", cT, e);
             }
         }

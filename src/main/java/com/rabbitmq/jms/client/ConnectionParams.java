@@ -47,6 +47,8 @@ public class ConnectionParams {
      */
     private boolean requeueOnMessageListenerException = false;
 
+    private boolean requeueOnNackException = false;
+
     /**
      * Whether using auto-delete for server-named queues for non-durable topics.
      * If set to true, those queues will be deleted when the session is closed.
@@ -174,6 +176,15 @@ public class ConnectionParams {
 
     public ConnectionParams setReceivingContextConsumer(ReceivingContextConsumer receivingContextConsumer) {
         this.receivingContextConsumer = receivingContextConsumer;
+        return this;
+    }
+
+    public boolean willRequeueOnNackException() {
+        return requeueOnNackException;
+    }
+
+    public ConnectionParams setRequeueOnNackException(boolean requeueOnNackException) {
+        this.requeueOnNackException = requeueOnNackException;
         return this;
     }
 }

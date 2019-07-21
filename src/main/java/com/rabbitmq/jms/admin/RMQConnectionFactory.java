@@ -54,7 +54,7 @@ import static com.rabbitmq.jms.util.UriCodec.encUserinfo;
  * TODO - implement SslContext option
  */
 public class RMQConnectionFactory implements ConnectionFactory, Referenceable, Serializable, QueueConnectionFactory,
-                                 TopicConnectionFactory {
+        TopicConnectionFactory {
     private final Logger logger = LoggerFactory.getLogger(RMQConnectionFactory.class);
 
     private static final long serialVersionUID = -4953157213762979615L;
@@ -63,17 +63,29 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
 
     private static final int DEFAULT_RABBITMQ_PORT = com.rabbitmq.client.ConnectionFactory.DEFAULT_AMQP_PORT;
 
-    /** Default username to RabbitMQ broker */
+    /**
+     * Default username to RabbitMQ broker
+     */
     private String username = "guest";
-    /** Default password to RabbitMQ broker */
+    /**
+     * Default password to RabbitMQ broker
+     */
     private String password = "guest";
-    /** Default virtualhost */
+    /**
+     * Default virtualhost
+     */
     private String virtualHost = "/";
-    /** Default host to RabbitMQ broker */
+    /**
+     * Default host to RabbitMQ broker
+     */
     private String host = "localhost";
-    /** Default port NOT SET - determined by the type of connection (ssl or non-ssl) */
+    /**
+     * Default port NOT SET - determined by the type of connection (ssl or non-ssl)
+     */
     private int port = -1;
-    /** How long to wait for onMessage to return, in milliseconds */
+    /**
+     * How long to wait for onMessage to return, in milliseconds
+     */
     private int onMessageTimeoutMs = 2000;
     /**
      * Whether {@link MessageProducer} properties (delivery mode,
@@ -89,6 +101,8 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
      * Default is false.
      */
     private boolean requeueOnMessageListenerException = false;
+
+    private boolean requeueOnNackException = false;
 
     /**
      * Whether using auto-delete for server-named queues for non-durable topics.
@@ -119,23 +133,28 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
      *
      * @since 1.10.0
      */
-    private Consumer<com.rabbitmq.client.ConnectionFactory> amqpConnectionFactoryPostProcessor = cf -> {};
+    private Consumer<com.rabbitmq.client.ConnectionFactory> amqpConnectionFactoryPostProcessor = cf -> {
+    };
 
     /**
      * Callback before sending a message.
      *
      * @since 1.11.0
      */
-    private SendingContextConsumer sendingContextConsumer = ctx -> {};
+    private SendingContextConsumer sendingContextConsumer = ctx -> {
+    };
 
     /**
      * Callback before receiving a message.
      *
      * @since 1.11.0
      */
-    private ReceivingContextConsumer receivingContextConsumer = ctx -> {};
+    private ReceivingContextConsumer receivingContextConsumer = ctx -> {
+    };
 
-    /** Default not to use ssl */
+    /**
+     * Default not to use ssl
+     */
     private boolean ssl = false;
     private String tlsProtocol;
     private SSLContext sslContext;
@@ -149,11 +168,15 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     private boolean hostnameVerification = false;
 
 
-    /** The maximum number of messages to read on a queue browser, which must be non-negative;
-     *  0 means unlimited and is the default; negative values are interpreted as 0. */
+    /**
+     * The maximum number of messages to read on a queue browser, which must be non-negative;
+     * 0 means unlimited and is the default; negative values are interpreted as 0.
+     */
     private int queueBrowserReadMax = Math.max(0, Integer.getInteger("rabbit.jms.queueBrowserReadMax", 0));
 
-    /** The time to wait for threads/messages to terminate during {@link Connection#close()} */
+    /**
+     * The time to wait for threads/messages to terminate during {@link Connection#close()}
+     */
     private volatile long terminationTimeout = Long.getLong("rabbit.jms.terminationTimeout", 15000);
 
     /**
@@ -209,7 +232,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
                 int port = uri.getPort();
                 if (port == -1) {
                     port = isSsl() ? DEFAULT_RABBITMQ_SSL_PORT :
-                        DEFAULT_RABBITMQ_PORT;
+                            DEFAULT_RABBITMQ_PORT;
                 }
                 return new Address(host, port);
             }).collect(Collectors.toList());
@@ -218,7 +241,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     }
 
     public Connection createConnection(String username, String password, List<Address> endpoints)
-        throws JMSException {
+            throws JMSException {
         return createConnection(username, password, cf -> cf.newConnection(endpoints));
     }
 
@@ -249,17 +272,18 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
         }
 
         RMQConnection conn = new RMQConnection(new ConnectionParams()
-            .setRabbitConnection(rabbitConnection)
-            .setTerminationTimeout(getTerminationTimeout())
-            .setQueueBrowserReadMax(getQueueBrowserReadMax())
-            .setOnMessageTimeoutMs(getOnMessageTimeoutMs())
-            .setChannelsQos(channelsQos)
-            .setPreferProducerMessageProperty(preferProducerMessageProperty)
-            .setRequeueOnMessageListenerException(requeueOnMessageListenerException)
-            .setCleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose(this.cleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose)
-            .setAmqpPropertiesCustomiser(amqpPropertiesCustomiser)
-            .setSendingContextConsumer(sendingContextConsumer)
-            .setReceivingContextConsumer(rcc)
+                .setRabbitConnection(rabbitConnection)
+                .setTerminationTimeout(getTerminationTimeout())
+                .setQueueBrowserReadMax(getQueueBrowserReadMax())
+                .setOnMessageTimeoutMs(getOnMessageTimeoutMs())
+                .setChannelsQos(channelsQos)
+                .setPreferProducerMessageProperty(preferProducerMessageProperty)
+                .setRequeueOnMessageListenerException(requeueOnMessageListenerException)
+                .setRequeueOnNackException(requeueOnNackException)
+                .setCleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose(this.cleanUpServerNamedQueuesForNonDurableTopicsOnSessionClose)
+                .setAmqpPropertiesCustomiser(amqpPropertiesCustomiser)
+                .setSendingContextConsumer(sendingContextConsumer)
+                .setReceivingContextConsumer(rcc)
         );
         conn.setTrustedPackages(this.trustedPackages);
         logger.debug("Connection {} created.", conn);
@@ -271,7 +295,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     }
 
     private com.rabbitmq.client.Connection instantiateNodeConnection(com.rabbitmq.client.ConnectionFactory cf, ConnectionCreator connectionCreator)
-        throws JMSException {
+            throws JMSException {
         try {
             return connectionCreator.create(cf);
         } catch (SSLException ssle) {
@@ -280,7 +304,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
             if (x instanceof IOException) {
                 IOException ioe = (IOException) x;
                 String msg = ioe.getMessage();
-                if (msg!=null) {
+                if (msg != null) {
                     if (msg.contains("authentication failure") || msg.contains("refused using authentication"))
                         throw new RMQJMSSecurityException(ioe);
                     else if (msg.contains("Connection refused"))
@@ -298,6 +322,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
 
     /**
      * Returns the current factory connection parameters in a URI String.
+     *
      * @return URI for RabbitMQ connection (as a coded String)
      */
     public String getUri() {
@@ -312,18 +337,19 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     public String toString() {
         StringBuilder sb = new StringBuilder("RMQConnectionFactory{");
         return (this.isSsl() ? sb.append("SSL, ") : sb)
-        .append("user='").append(this.username)
-        .append("', password").append(this.password!=null ? "=xxxxxxxx" : " not set")
-        .append(", host='").append(this.host)
-        .append("', port=").append(this.getPort())
-        .append(", virtualHost='").append(this.virtualHost)
-        .append("', onMessageTimeoutMs=").append(this.onMessageTimeoutMs)
-        .append(", queueBrowserReadMax=").append(this.queueBrowserReadMax)
-        .append('}').toString();
+                .append("user='").append(this.username)
+                .append("', password").append(this.password != null ? "=xxxxxxxx" : " not set")
+                .append(", host='").append(this.host)
+                .append("', port=").append(this.getPort())
+                .append(", virtualHost='").append(this.virtualHost)
+                .append("', onMessageTimeoutMs=").append(this.onMessageTimeoutMs)
+                .append(", queueBrowserReadMax=").append(this.queueBrowserReadMax)
+                .append('}').toString();
     }
 
     /**
      * Set connection factory parameters by URI String.
+     *
      * @param uriString URI to use for instantiated connection
      * @throws JMSException if connection URI is invalid
      */
@@ -406,7 +432,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     private void maybeEnableTLS(com.rabbitmq.client.ConnectionFactory factory) {
         if (this.ssl)
             try {
-                if(this.useDefaultSslContext) {
+                if (this.useDefaultSslContext) {
                     factory.useSslProtocol(SSLContext.getDefault());
                 } else {
                     if (this.sslContext != null) {
@@ -438,9 +464,9 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     }
 
     /**
-     * @deprecated Use {@link #useSslProtocol()}, {@link #useSslProtocol(String)}
-     *             or {@link #useSslProtocol(SSLContext)}.
      * @param ssl if true, enables TLS for connections opened
+     * @deprecated Use {@link #useSslProtocol()}, {@link #useSslProtocol(String)}
+     * or {@link #useSslProtocol(SSLContext)}.
      */
     @Deprecated
     public void setSsl(boolean ssl) {
@@ -450,28 +476,30 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     /**
      * Enables TLS on opened connections with the highest TLS
      * version available.
+     *
      * @throws NoSuchAlgorithmException see {@link NoSuchAlgorithmException}
      */
     public void useSslProtocol() throws NoSuchAlgorithmException {
         this.useSslProtocol(
-            com.rabbitmq.client.ConnectionFactory.computeDefaultTlsProtocol(
-                SSLContext.getDefault().getSupportedSSLParameters().getProtocols()));
+                com.rabbitmq.client.ConnectionFactory.computeDefaultTlsProtocol(
+                        SSLContext.getDefault().getSupportedSSLParameters().getProtocols()));
     }
 
     /**
      * Enables TLS on opened connections using the provided TLS protocol
      * version.
+     *
      * @param protocol TLS or SSL protocol version.
      * @see <a href="https://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html#SunJSSEProvider">JDK documentation on protocol names</a>
      */
-    public void useSslProtocol(String protocol)
-    {
+    public void useSslProtocol(String protocol) {
         this.tlsProtocol = protocol;
         this.ssl = true;
     }
 
     /**
      * Enables TLS on opened connections using the provided {@link SSLContext}.
+     *
      * @param context {@link SSLContext} to use
      */
     public void useSslProtocol(SSLContext context) {
@@ -482,7 +510,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     /**
      * Whether to use the default {@link SSLContext} or not.
      * Default is false.
-     *
+     * <p>
      * When this option is enabled, the default {@link SSLContext}
      * will always be used and will override any other {@link SSLContext}
      * set.
@@ -507,7 +535,7 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     /**
      * Whether to use the default {@link SSLContext} or not.
      * Default is false.
-     *
+     * <p>
      * When this option is enabled, the default {@link SSLContext}
      * will always be used and will override any other {@link SSLContext}
      * set.
@@ -551,23 +579,25 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
 
     /**
      * Adds a String valued property to a Reference (as a RefAddr)
-     * @param ref - the reference to contain the value
+     *
+     * @param ref          - the reference to contain the value
      * @param propertyName - the name of the property
-     * @param value - the value to store with the property
+     * @param value        - the value to store with the property
      */
     private static void addStringRefProperty(Reference ref,
                                              String propertyName,
                                              String value) {
-        if (value==null || propertyName==null) return;
+        if (value == null || propertyName == null) return;
         RefAddr ra = new StringRefAddr(propertyName, value);
         ref.add(ra);
     }
 
     /**
      * Adds an integer valued property to a Reference (as a RefAddr).
-     * @param ref - the reference to contain the value
+     *
+     * @param ref          - the reference to contain the value
      * @param propertyName - the name of the property
-     * @param value - the value to store with the property
+     * @param value        - the value to store with the property
      */
     private static void addIntegerRefProperty(Reference ref,
                                               String propertyName,
@@ -697,9 +727,9 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
      * @return the port the RabbitMQ broker listens to
      */
     public int getPort() {
-        return this.port!=-1 ? this.port
-             : isSsl() ? DEFAULT_RABBITMQ_SSL_PORT
-             : DEFAULT_RABBITMQ_PORT;
+        return this.port != -1 ? this.port
+                : isSsl() ? DEFAULT_RABBITMQ_SSL_PORT
+                : DEFAULT_RABBITMQ_PORT;
     }
 
     /**
@@ -752,18 +782,23 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
 
     /**
      * Returns the time in milliseconds {@link MessageListener#onMessage(Message)} can take to process a message
+     *
      * @return the time in milliseconds {@link MessageListener#onMessage(Message)} can take to process a message
      */
-    public int getOnMessageTimeoutMs() { return this.onMessageTimeoutMs; }
+    public int getOnMessageTimeoutMs() {
+        return this.onMessageTimeoutMs;
+    }
 
     /**
      * Sets <i>onMessageTimeoutMs</i>: the time in milliseconds {@link MessageListener#onMessage(Message)} can take to process a message.
      * Non-positive values are rejected.
+     *
      * @param onMessageTimeoutMs - duration in milliseconds
      */
-    public void setOnMessageTimeoutMs(int onMessageTimeoutMs){
+    public void setOnMessageTimeoutMs(int onMessageTimeoutMs) {
         if (onMessageTimeoutMs > 0) this.onMessageTimeoutMs = onMessageTimeoutMs;
-        else this.logger.warn("Cannot set onMessageTimeoutMs to non-positive value {} (on {})", onMessageTimeoutMs, this);
+        else
+            this.logger.warn("Cannot set onMessageTimeoutMs to non-positive value {} (on {})", onMessageTimeoutMs, this);
     }
 
     /**
@@ -778,9 +813,9 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
     /**
      * QoS setting for channels created by this connection factory.
      *
-     * @see com.rabbitmq.client.Channel#basicQos(int)
      * @param channelsQos maximum number of messages that the server
-     * will deliver, 0 if unlimited
+     *                    will deliver, 0 if unlimited
+     * @see com.rabbitmq.client.Channel#basicQos(int)
      */
     public void setChannelsQos(int channelsQos) {
         this.channelsQos = channelsQos;
@@ -840,13 +875,13 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
      * Set the collector for AMQP-client metrics.
      *
      * @param metricsCollector
-     * @since 1.10.0
      * @see com.rabbitmq.client.ConnectionFactory#setMetricsCollector(MetricsCollector)
+     * @since 1.10.0
      */
     public void setMetricsCollector(MetricsCollector metricsCollector) {
         this.metricsCollector = metricsCollector;
     }
-    
+
     public List<String> getUris() {
         return this.uris.stream().map(uri -> uri.toString()).collect(Collectors.toList());
     }
@@ -905,6 +940,14 @@ public class RMQConnectionFactory implements ConnectionFactory, Referenceable, S
      */
     public void setDeclareReplyToDestination(boolean declareReplyToDestination) {
         this.declareReplyToDestination = declareReplyToDestination;
+    }
+
+    public boolean isRequeueOnNackException() {
+        return requeueOnNackException;
+    }
+
+    public void setRequeueOnNackException(boolean requeueOnNackException) {
+        this.requeueOnNackException = requeueOnNackException;
     }
 
     @FunctionalInterface
