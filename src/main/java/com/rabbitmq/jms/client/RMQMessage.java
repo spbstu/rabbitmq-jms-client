@@ -906,8 +906,9 @@ public abstract class RMQMessage implements Message, Cloneable {
         // message.setJMSDestination(dest);                                     // DO NOT set the destination bug#57214768
         // JMSProperties already set
         message.setReadonly(true);                                              // Set readOnly - mandatory for received messages
+        setupReplyTo(message, response.getProps().getReplyTo());
 
-        maybeSetupDirectReplyTo(message, response.getProps().getReplyTo());
+//        maybeSetupDirectReplyTo(message, response.getProps().getReplyTo());
         receivingContextConsumer.accept(new ReceivingContext(message));
 
         return message;
@@ -926,13 +927,21 @@ public abstract class RMQMessage implements Message, Cloneable {
             message.setJMSDestination(dest);                                        // We cannot know the original destination, so set local one
             message.setJMSPropertiesFromAmqpProperties(props);
             message.setReadonly(true);                                              // Set readOnly - mandatory for received messages
+            setupReplyTo(message, response.getProps().getReplyTo());
 
-            maybeSetupDirectReplyTo(message, response.getProps().getReplyTo());
+//            maybeSetupDirectReplyTo(message, response.getProps().getReplyTo());
             receivingContextConsumer.accept(new ReceivingContext(message));
 
             return message;
         } catch (IOException x) {
             throw new RMQJMSException(x);
+        }
+    }
+
+    private static void setupReplyTo(RMQMessage message, String replyTo) throws JMSException {
+        if (replyTo != null && message.getJMSReplyTo() == null) {
+            RMQDestination replyToDestination = new RMQDestination(replyTo, "", replyTo, replyTo);
+            message.setJMSReplyTo(replyToDestination);
         }
     }
 

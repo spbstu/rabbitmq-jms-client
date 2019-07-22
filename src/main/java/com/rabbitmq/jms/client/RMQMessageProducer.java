@@ -311,8 +311,9 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
                 bob.priority(priority);
                 bob.expiration(rmqExpiration(timeToLive));
                 bob.headers(msg.toAmqpHeaders());
+                setReplyToProperty(bob, msg);
 
-                maybeSetReplyToPropertyToDirectReplyTo(bob, msg);
+//                maybeSetReplyToPropertyToDirectReplyTo(bob, msg);
 
                 bob = amqpPropertiesCustomiser.apply(bob, msg);
 
@@ -338,14 +339,22 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
             bob.priority(priority);
             bob.expiration(rmqExpiration(timeToLive));
             bob.headers(msg.toHeaders());
+            setReplyToProperty(bob, msg);
 
-            maybeSetReplyToPropertyToDirectReplyTo(bob, msg);
+//            maybeSetReplyToPropertyToDirectReplyTo(bob, msg);
 
             byte[] data = msg.toByteArray();
 
             this.session.getChannel().basicPublish(destination.getAmqpExchangeName(), destination.getAmqpRoutingKey(), bob.build(), data);
         } catch (IOException x) {
             throw new RMQJMSException(x);
+        }
+    }
+
+    private static void setReplyToProperty(AMQP.BasicProperties.Builder builder, RMQMessage msg) throws JMSException {
+        if (msg.getJMSReplyTo() != null && msg.getJMSReplyTo() instanceof RMQDestination) {
+            RMQDestination replyTo = (RMQDestination) msg.getJMSReplyTo();
+            builder.replyTo(replyTo.getAmqpQueueName());
         }
     }
 
