@@ -62,7 +62,7 @@ public class DeliveryExecutor {
             this.getExecutorService().submit(new CallOnMessage(rmqMessage, messageListener)).get(this.onMessageTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             this.closeAbruptly();
-            throw new RMQJMSException("onMessage took too long and was interrupted", null);
+            throw new RMQJMSException("onMessage took too long and was interrupted", e);
         } catch (ExecutionException e) {
             throw new RMQMessageListenerExecutionJMSException("onMessage threw exception", e.getCause());
         }

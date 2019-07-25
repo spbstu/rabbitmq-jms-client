@@ -185,7 +185,10 @@ class MessageListenerConsumer implements Consumer, Abortable {
             }
         } catch (JMSException x) {
             logger.error("Error while delivering message", x);
-            throw new IOException(x);
+            if (x.getCause() instanceof TimeoutException)
+                nack(envelope.getDeliveryTag());
+            else
+                throw new IOException(x);
         } catch (InterruptedException ie) {
             logger.warn("Message delivery has been interrupted", ie);
             throw new IOException("Interrupted while delivering message", ie);

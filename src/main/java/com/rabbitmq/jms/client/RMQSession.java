@@ -519,7 +519,7 @@ public class RMQSession implements Session, QueueSession, TopicSession {
     void explicitNack(long deliveryTag) {
         if (this.enterCommittingBlock()) {
             try {
-                this.channel.basicNack(deliveryTag, false, true);
+                this.channel.basicNack(deliveryTag, false, requeueOnMessageListenerException);
             } catch (Exception x) {
                 // TODO logging impl debug message
                 this.logger.warn("Cannot reject/requeue message received (dTag={})", deliveryTag, x);
