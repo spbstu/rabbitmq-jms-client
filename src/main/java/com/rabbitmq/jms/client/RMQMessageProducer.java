@@ -75,8 +75,8 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
     private final SendingContextConsumer sendingContextConsumer;
 
     public RMQMessageProducer(RMQSession session, RMQDestination destination, boolean preferProducerMessageProperty,
-            BiFunction<AMQP.BasicProperties.Builder, Message, AMQP.BasicProperties.Builder> amqpPropertiesCustomiser,
-            SendingContextConsumer sendingContextConsumer) {
+                              BiFunction<AMQP.BasicProperties.Builder, Message, AMQP.BasicProperties.Builder> amqpPropertiesCustomiser,
+                              SendingContextConsumer sendingContextConsumer) {
         this.session = session;
         this.destination = destination;
         if (preferProducerMessageProperty) {
@@ -89,7 +89,7 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
     }
 
     public RMQMessageProducer(RMQSession session, RMQDestination destination, boolean preferProducerMessageProperty,
-        BiFunction<AMQP.BasicProperties.Builder, Message, AMQP.BasicProperties.Builder> amqpPropertiesCustomiser) {
+                              BiFunction<AMQP.BasicProperties.Builder, Message, AMQP.BasicProperties.Builder> amqpPropertiesCustomiser) {
         this(session, destination, preferProducerMessageProperty, amqpPropertiesCustomiser, ctx -> {});
     }
 
@@ -306,11 +306,12 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
         if (msg instanceof RMQBytesMessage || msg instanceof RMQTextMessage) {
             try {
                 AMQP.BasicProperties.Builder bob = new AMQP.BasicProperties.Builder();
-                bob.contentType("application/octet-stream");
+                bob.contentType("application/json");
                 bob.deliveryMode(RMQMessage.rmqDeliveryMode(deliveryMode));
                 bob.priority(priority);
                 bob.expiration(rmqExpiration(timeToLive));
                 bob.headers(msg.toAmqpHeaders());
+                bob.correlationId(msg.getJMSCorrelationID());
                 setReplyToProperty(bob, msg);
 
 //                maybeSetReplyToPropertyToDirectReplyTo(bob, msg);
@@ -334,11 +335,12 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
         this.session.declareDestinationIfNecessary(destination);
         try {
             AMQP.BasicProperties.Builder bob = new AMQP.BasicProperties.Builder();
-            bob.contentType("application/octet-stream");
+            bob.contentType("application/json");
             bob.deliveryMode(RMQMessage.rmqDeliveryMode(deliveryMode));
             bob.priority(priority);
             bob.expiration(rmqExpiration(timeToLive));
             bob.headers(msg.toHeaders());
+            bob.correlationId(msg.getJMSCorrelationID());
             setReplyToProperty(bob, msg);
 
 //            maybeSetReplyToPropertyToDirectReplyTo(bob, msg);
@@ -396,9 +398,9 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
         if (ttl == 0L) return null;
 
         return String.valueOf( ttl < 0L      ? 0L
-                             : ttl > MAX_TTL ? MAX_TTL
-                             :                 ttl
-                             );
+                : ttl > MAX_TTL ? MAX_TTL
+                :                 ttl
+        );
     }
 
     /**
@@ -503,10 +505,10 @@ public class RMQMessageProducer implements MessageProducer, QueueSender, TopicPu
         @Override
         public void send(Destination destination, Message message) throws JMSException {
             internalSend((RMQDestination) destination, message,
-                message.propertyExists(JMS_MESSAGE_DELIVERY_MODE) ? message.getJMSDeliveryMode() : getDeliveryMode(),
-                message.propertyExists(JMS_MESSAGE_PRIORITY) ? message.getJMSPriority() : getPriority(),
-                message.propertyExists(JMS_MESSAGE_EXPIRATION) ? message.getJMSExpiration() : getTimeToLive(),
-                message.propertyExists(JMS_MESSAGE_EXPIRATION) ? MessageExpirationType.EXPIRATION : MessageExpirationType.TTL);
+                    message.propertyExists(JMS_MESSAGE_DELIVERY_MODE) ? message.getJMSDeliveryMode() : getDeliveryMode(),
+                    message.propertyExists(JMS_MESSAGE_PRIORITY) ? message.getJMSPriority() : getPriority(),
+                    message.propertyExists(JMS_MESSAGE_EXPIRATION) ? message.getJMSExpiration() : getTimeToLive(),
+                    message.propertyExists(JMS_MESSAGE_EXPIRATION) ? MessageExpirationType.EXPIRATION : MessageExpirationType.TTL);
         }
 
         @Override
