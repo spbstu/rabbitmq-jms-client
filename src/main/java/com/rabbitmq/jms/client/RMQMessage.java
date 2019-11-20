@@ -944,7 +944,6 @@ public abstract class RMQMessage implements Message, Cloneable {
             message.setJMSReplyTo(replyToDestination);
         }
     }
-
     /**
      * Properly assign JMSReplyTo header when using direct reply to.
      * <p>
@@ -1421,7 +1420,15 @@ public abstract class RMQMessage implements Message, Cloneable {
                 else if (key.equals("JMSType"))         { this.setJMSType(val.toString());}
                 else if (key.startsWith(PREFIX))        {} // avoid setting this internal field
                 else if (key.startsWith("JMS"))         {} // avoid setting this field
+                else if (key.equals("route_queue"))     {}
+                else if (key.equals("exchange_queue"))   {}
                 else                                    { this.userJmsProperties.put(key, val.toString());}
+            }
+
+            if (hdrs.containsKey("route_queue") && hdrs.containsKey("exchange_queue")) {
+                String routeQueue = hdrs.get("route_queue").toString();
+                String exchangeQueue = hdrs.get("exchange_queue").toString();
+                this.userJmsProperties.put("exchange_queue", new RMQDestination(exchangeQueue, exchangeQueue, routeQueue, ""));
             }
         }
     }
